@@ -1,0 +1,19 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Import Leaflet CSS */
+@import "leaflet/dist/leaflet.css";
+
+@layer base {
+  body {
+    background-color: #030712; /* Real Rails Dark Theme */
+    color: #e5e7eb; /* Tailwind gray-200 */
+    overflow-x: hidden;
+  }
+}
+
+/* Fix for Leaflet map z-index issues in Tailwind */
+.leaflet-container {
+  z-index: 10;
+}
