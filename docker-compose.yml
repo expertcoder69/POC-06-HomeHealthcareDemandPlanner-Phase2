@@ -1,0 +1,28 @@
+services:
+  backend:
+    build: 
+      context: ./backend
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONUNBUFFERED=1
+    networks:
+      - infocreon-network
+
+  frontend:
+    build:
+      context: ./frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+    env_file:
+      - .env
+    depends_on:
+      - backend
+    networks:
+      - infocreon-network
+
+networks:
+  infocreon-network:
+    driver: bridge

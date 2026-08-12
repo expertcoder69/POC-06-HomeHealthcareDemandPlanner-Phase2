@@ -1,0 +1,963 @@
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+backend/
+  main.py
+frontend/
+  src/
+    app/
+      fonts/
+        GeistMonoVF.woff
+        GeistVF.woff
+      favicon.ico
+      globals.css
+      layout.tsx
+      page.tsx
+    components/
+      charts/
+        AnalyticsCharts.tsx
+      dashboard/
+        KPIStrip.tsx
+      map/
+        DemandMap.tsx
+        MapWrapper.tsx
+  .eslintrc.json
+  .gitignore
+  next.config.mjs
+  package.json
+  postcss.config.mjs
+  README.md
+  tailwind.config.ts
+  tsconfig.json
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path="backend/main.py">
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+import random
+import math
+from typing import List
+import uvicorn
+
+app = FastAPI(title="Home Healthcare Demand Planner API")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# --- Pydantic Models ---
+class Coordinates(BaseModel):
+    lat: float
+    lng: float
+
+class Caregiver(BaseModel):
+    id: str
+    name: str
+    location: Coordinates
+    status: str  # "Active", "In Transit", "Available"
+    specialty: str
+
+class VisitRequest(BaseModel):
+    id: str
+    location: Coordinates
+    urgency: str  # "High", "Medium", "Low"
+    service_type: str
+    wait_time_mins: int
+
+class KPI(BaseModel):
+    total_requests: int
+    active_caregivers: int
+    average_wait_time: int
+    caregiver_ratio: float
+    
+class WaitTimeHistogram(BaseModel):
+    zone: str
+    wait_times: List[int]
+
+# --- Synthetic Data Generation ---
+CITIES = {
+    "Riyadh": {"lat": 24.7136, "lng": 46.6753},
+    "Jeddah": {"lat": 21.5433, "lng": 39.1925},
+    "Abu_Dhabi": {"lat": 24.4539, "lng": 54.3773},
+    "Dubai": {"lat": 25.2048, "lng": 55.2708}
+}
+
+def generate_random_location(center_lat, center_lng, radius_km=15):
+    radius_in_degrees = radius_km / 111.0
+    u = random.uniform(0, 1)
+    v = random.uniform(0, 1)
+    w = radius_in_degrees * math.sqrt(u)
+    t = 2 * math.pi * v
+    x = w * math.cos(t)
+    y = w * math.sin(t)
+    new_lng = x / math.cos(math.radians(center_lat)) + center_lng
+    new_lat = y + center_lat
+    return Coordinates(lat=new_lat, lng=new_lng)
+
+def generate_caregivers(city: str, count: int) -> List[Caregiver]:
+    caregivers = []
+    center = CITIES[city]
+    specialties = ["Nursing Care", "Physiotherapy", "Palliative Care", "Respiratory Care"]
+    statuses = ["Available", "In Transit", "Active"]
+    for i in range(count):
+        loc = generate_random_location(center["lat"], center["lng"], radius_km=20)
+        caregivers.append(Caregiver(
+            id=f"CG-{city[:3]}-{i}",
+            name=f"Caregiver {i}",
+            location=loc,
+            status=random.choices(statuses, weights=[0.4, 0.3, 0.3])[0],
+            specialty=random.choice(specialties)
+        ))
+    return caregivers
+
+def generate_visit_requests(city: str, count: int) -> List[VisitRequest]:
+    requests = []
+    center = CITIES[city]
+    services = ["Post-Op Care", "Elderly Assistance", "Chronic Disease Mgmt", "Medication Admin"]
+    urgencies = ["Low", "Medium", "High"]
+    
+    for i in range(count):
+        loc = generate_random_location(center["lat"], center["lng"], radius_km=25)
+        urgency = random.choices(urgencies, weights=[0.5, 0.3, 0.2])[0]
+        base_wait = {"Low": 120, "Medium": 60, "High": 30}[urgency]
+        actual_wait = max(0, int(random.gauss(base_wait, 20)))
+
+        requests.append(VisitRequest(
+            id=f"VR-{city[:3]}-{i}",
+            location=loc,
+            urgency=urgency,
+            service_type=random.choice(services),
+            wait_time_mins=actual_wait
+        ))
+    return requests
+
+# --- API Endpoints ---
+
+@app.get("/api/v1/demand/heatmap")
+def get_heatmap(city: str = "Abu_Dhabi", count: int = 200):
+    if city not in CITIES:
+        city = "Abu_Dhabi"
+    return generate_visit_requests(city, count)
+
+@app.get("/api/v1/caregivers/locations")
+def get_caregivers(city: str = "Abu_Dhabi", count: int = 50):
+    if city not in CITIES:
+        city = "Abu_Dhabi"
+    return generate_caregivers(city, count)
+
+@app.get("/api/v1/analytics/kpis")
+def get_kpis(city: str = "Abu_Dhabi"):
+    req_count = random.randint(150, 300)
+    cg_count = random.randint(40, 80)
+    
+    return KPI(
+        total_requests=req_count,
+        active_caregivers=cg_count,
+        average_wait_time=random.randint(45, 90),
+        caregiver_ratio=round(req_count / max(1, cg_count), 2)
+    )
+
+@app.get("/api/v1/analytics/wait-times")
+def get_wait_time_histogram(city: str = "Abu_Dhabi"):
+    return [
+        WaitTimeHistogram(zone="North District", wait_times=[random.randint(10, 180) for _ in range(50)]),
+        WaitTimeHistogram(zone="South District", wait_times=[random.randint(20, 200) for _ in range(60)]),
+        WaitTimeHistogram(zone="Central Business", wait_times=[random.randint(5, 120) for _ in range(80)])
+    ]
+
+if __name__ == "__main__":
+    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
+</file>
+
+<file path="frontend/src/app/globals.css">
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Import Leaflet CSS */
+@import "leaflet/dist/leaflet.css";
+
+@layer base {
+  body {
+    background-color: #030712; /* Real Rails Dark Theme */
+    color: #e5e7eb; /* Tailwind gray-200 */
+    overflow-x: hidden;
+  }
+}
+
+/* Fix for Leaflet map z-index issues in Tailwind */
+.leaflet-container {
+  z-index: 10;
+}
+</file>
+
+<file path="frontend/src/app/layout.tsx">
+import type { Metadata } from "next";
+import localFont from "next/font/local";
+import "./globals.css";
+
+const geistSans = localFont({
+  src: "./fonts/GeistVF.woff",
+  variable: "--font-geist-sans",
+  weight: "100 900",
+});
+const geistMono = localFont({
+  src: "./fonts/GeistMonoVF.woff",
+  variable: "--font-geist-mono",
+  weight: "100 900",
+});
+
+export const metadata: Metadata = {
+  title: "Create Next App",
+  description: "Generated by create next app",
+};
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  return (
+    <html lang="en">
+      <body
+        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+      >
+        {children}
+      </body>
+    </html>
+  );
+}
+</file>
+
+<file path="frontend/src/app/page.tsx">
+"use client";
+
+import { useState } from "react";
+import { Activity, Info, X, User } from "lucide-react";
+import MapWrapper from "@/components/map/MapWrapper";
+import KPIStrip from "@/components/dashboard/KPIStrip";
+import AnalyticsCharts from "@/components/charts/AnalyticsCharts";
+
+export default function Dashboard() {
+  const [city, setCity] = useState("Abu_Dhabi");
+  const [activeServices, setActiveServices] = useState<string[]>([
+    "Post-Op Care", 
+    "Elderly Assistance", 
+    "Chronic Disease Mgmt", 
+    "Medication Admin"
+  ]);
+  const [isPanelOpen, setIsPanelOpen] = useState(false);
+  const [showMetadata, setShowMetadata] = useState(false);
+
+  const toggleService = (service: string) => {
+    setActiveServices(prev => 
+      prev.includes(service) ? prev.filter(s => s !== service) : [...prev, service]
+    );
+  };
+
+  const handleExport = async () => {
+    try {
+      const res = await fetch(`http://127.0.0.1:8000/api/v1/demand/heatmap?city=${city}`);
+      const data = await res.json();
+      
+      const csvContent = "data:text/csv;charset=utf-8," 
+        + "ID,Latitude,Longitude,Urgency,Service,WaitTime\n"
+        + data.map((row: any) => 
+            `${row.id},${row.location.lat},${row.location.lng},${row.urgency},${row.service_type},${row.wait_time_mins}`
+          ).join("\n");
+
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement("a");
+      link.setAttribute("href", encodedUri);
+      link.setAttribute("download", `demand_export_${city}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (error) {
+      console.error("Export failed", error);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-[#020b14] relative overflow-hidden font-sans text-slate-200">
+      
+      {/* HEADER (Transparent, Floating) */}
+      <header className="absolute top-0 left-0 right-0 z-50 flex justify-between items-start p-6 pointer-events-none">
+        
+        {/* Left: Branding */}
+        <div className="flex items-center gap-4 bg-[#020b14]/80 backdrop-blur-md py-3 px-5 rounded-2xl border border-teal-500/20 pointer-events-auto shadow-lg shrink-0">
+          <Activity className="text-teal-400 w-6 h-6" />
+          <div className="flex flex-col">
+            <span className="text-[9px] font-bold tracking-[0.25em] text-slate-400 uppercase">
+              Infocreon Internship
+            </span>
+            <h1 className="text-sm font-bold text-white tracking-wide">
+              Home Healthcare Platform
+            </h1>
+          </div>
+        </div>
+
+        {/* Center: Live Diagnostics (Shifted Left) */}
+        <div className="hidden xl:flex flex-1 justify-start ml-8 pointer-events-auto">
+          <KPIStrip city={city} />
+        </div>
+
+        {/* Right: Metadata Button & Popup */}
+        <div className="relative pointer-events-auto shrink-0">
+          <button 
+            onClick={() => setShowMetadata(!showMetadata)}
+            className="p-3 bg-[#020b14]/80 backdrop-blur-md rounded-full border border-teal-500/20 hover:bg-teal-500/20 transition-colors focus:outline-none"
+          >
+            <Info className="w-5 h-5 text-teal-400" />
+          </button>
+          
+          {showMetadata && (
+            <div className="absolute top-full right-0 mt-4 w-[380px] bg-[#061220] border border-slate-800 rounded-xl shadow-2xl z-50 animate-in fade-in slide-in-from-top-4 overflow-hidden">
+              <div className="p-5 border-b border-slate-800 flex items-start justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-[#0a1b2e] flex items-center justify-center border border-slate-700">
+                    <User className="w-5 h-5 text-yellow-400 fill-yellow-400" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-bold text-white leading-tight">Developer Signature</h2>
+                    <p className="text-xs text-slate-400">Verified project author details</p>
+                  </div>
+                </div>
+                <button onClick={() => setShowMetadata(false)} className="text-slate-400 hover:text-white transition-colors">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              
+              <div className="p-5 flex flex-col gap-4">
+                <div className="flex justify-between items-center border-b border-slate-800/50 pb-3">
+                  <span className="text-[11px] tracking-[0.15em] text-slate-400 uppercase">Architect</span>
+                  <span className="text-sm text-white font-medium uppercase">MARIAM BYJU</span>
+                </div>
+                <div className="flex justify-between items-center border-b border-slate-800/50 pb-3">
+                  <span className="text-[11px] tracking-[0.15em] text-slate-400 uppercase">Batch</span>
+                  <span className="text-sm text-white">Batch 5 Interns</span>
+                </div>
+                <div className="flex justify-between items-center border-b border-slate-800/50 pb-3">
+                  <span className="text-[11px] tracking-[0.15em] text-slate-400 uppercase">POC ID</span>
+                  <span className="text-sm text-white font-medium">06</span>
+                </div>
+                <div className="flex justify-between items-center border-b border-slate-800/50 pb-3">
+                  <span className="text-[11px] tracking-[0.15em] text-slate-400 uppercase">GitHub</span>
+                  <span className="text-sm text-white">expertcoder69</span>
+                </div>
+                <div className="flex justify-between items-center border-b border-slate-800/50 pb-3">
+                  <span className="text-[11px] tracking-[0.15em] text-slate-400 uppercase">Stack</span>
+                  <span className="text-sm text-white text-right">Next.js, FastAPI, Tailwind CSS</span>
+                </div>
+              </div>
+
+              <div className="bg-[#040d17] p-4 text-center border-t border-slate-800">
+                <span className="text-[11px] text-slate-500">© 2026 Infocreon Internship</span>
+              </div>
+            </div>
+          )}
+        </div>
+      </header>
+
+      {/* FLOATING LEGEND (Node Taxonomy) */}
+      <div className="absolute bottom-8 left-6 z-40 bg-[#020b14]/80 backdrop-blur-md border border-teal-500/20 rounded-xl p-5 shadow-2xl pointer-events-auto">
+        <h3 className="text-[10px] font-bold text-teal-500 uppercase tracking-widest mb-4">Node Taxonomy</h3>
+        <div className="flex flex-col gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-3 h-3 rounded-full bg-[#ef4444] shadow-[0_0_8px_#ef4444]"></div>
+            <span className="text-xs text-slate-300"><strong>Critical Demand</strong> (High Urgency)</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="w-3 h-3 rounded-full bg-[#f59e0b] shadow-[0_0_8px_#f59e0b]"></div>
+            <span className="text-xs text-slate-300"><strong>Standard Demand</strong> (Routine Care)</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="w-3 h-3 rounded-full border border-[#2dd4bf] bg-[#0f766e] shadow-[0_0_8px_#2dd4bf]"></div>
+            <span className="text-xs text-slate-300"><strong>Active Caregiver</strong> (Supply Node)</span>
+          </div>
+        </div>
+      </div>
+
+      {/* 100% FULL SCREEN MAP STAGE */}
+      <main className="absolute inset-0 z-0">
+        <MapWrapper 
+          city={city} 
+          activeServices={activeServices} 
+          onNodeSelect={() => setIsPanelOpen(true)} 
+        />
+      </main>
+
+      {/* SLIDE-OVER INTELLIGENCE PANEL */}
+      <aside className={`absolute top-0 right-0 h-full w-full max-w-[450px] bg-[#020b14]/95 backdrop-blur-2xl border-l border-teal-500/20 shadow-2xl z-40 transform transition-transform duration-500 ease-in-out flex flex-col ${isPanelOpen ? 'translate-x-0' : 'translate-x-full'}`}>
+        
+        <div className="p-6 border-b border-teal-500/20 flex justify-between items-center bg-[#020b14]">
+          <h2 className="text-sm font-bold text-white uppercase tracking-widest flex items-center gap-3">
+            <div className="w-2 h-2 rounded-full bg-teal-400 animate-pulse"></div>
+            Intelligence Panel
+          </h2>
+          <button onClick={() => setIsPanelOpen(false)} className="text-slate-400 hover:text-white transition-colors">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-8 custom-scrollbar">
+
+          <div className="space-y-3">
+             <h3 className="text-xs font-bold text-teal-500 uppercase tracking-wider">Predictive Analytics</h3>
+             <AnalyticsCharts city={city} />
+          </div>
+
+          <div className="space-y-3 pb-8">
+            <h3 className="text-xs font-bold text-teal-500 uppercase tracking-wider">Control Parameters</h3>
+            <div className="bg-slate-900/40 border border-teal-500/20 rounded-xl p-5 flex flex-col gap-5">
+              
+              <div className="flex flex-col gap-2">
+                <label className="text-[10px] text-slate-400 font-mono tracking-widest">SELECT REGION</label>
+                <select 
+                  value={city} 
+                  onChange={(e) => setCity(e.target.value)}
+                  className="bg-[#020b14] border border-teal-500/30 text-white text-sm rounded-lg p-2.5 outline-none focus:border-teal-400 transition-colors"
+                >
+                  <option value="Abu_Dhabi">Abu Dhabi</option>
+                  <option value="Dubai">Dubai</option>
+                  <option value="Riyadh">Riyadh</option>
+                  <option value="Jeddah">Jeddah</option>
+                </select>
+              </div>
+              
+              <div className="flex flex-col gap-2">
+                <label className="text-[10px] text-slate-400 font-mono tracking-widest">SERVICE TIER ROUTING</label>
+                <div className="flex flex-col gap-3 text-sm text-slate-300 mt-1">
+                  {["Post-Op Care", "Elderly Assistance", "Chronic Disease Mgmt", "Medication Admin"].map(svc => (
+                    <label key={svc} className="flex items-center gap-3 cursor-pointer group">
+                      <input 
+                        type="checkbox" 
+                        checked={activeServices.includes(svc)}
+                        onChange={() => toggleService(svc)}
+                        className="w-4 h-4 rounded border-teal-500/30 text-teal-400 focus:ring-teal-400/50 bg-[#020b14] transition-all"
+                      /> 
+                      <span className="group-hover:text-teal-300 transition-colors">{svc}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <button 
+                onClick={handleExport}
+                className="mt-2 w-full bg-teal-500/10 hover:bg-teal-500/20 text-teal-400 border border-teal-500/30 hover:border-teal-400 transition-all py-3 rounded-lg text-xs font-bold tracking-widest"
+              >
+                EXPORT RAW DATA
+              </button>
+            </div>
+          </div>
+
+        </div>
+      </aside>
+    </div>
+  );
+}
+</file>
+
+<file path="frontend/src/components/charts/AnalyticsCharts.tsx">
+"use client";
+
+import { useEffect, useState } from "react";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area, CartesianGrid } from "recharts";
+
+const trendData = [
+  { time: "08:00", volume: 45 }, { time: "10:00", volume: 80 }, { time: "12:00", volume: 120 },
+  { time: "14:00", volume: 150 }, { time: "16:00", volume: 110 }, { time: "18:00", volume: 60 },
+];
+
+export default function AnalyticsCharts({ city }: { city: string }) {
+  const [waitData, setWaitData] = useState<any[]>([]);
+
+  useEffect(() => {
+    fetch(`http://127.0.0.1:8000/api/v1/analytics/wait-times?city=${city}`)
+      .then((res) => res.json())
+      .then((data) => {
+        const formatted = data.map((d: any) => ({
+          zone: d.zone,
+          avgWait: Math.round(d.wait_times.reduce((a: number, b: number) => a + b, 0) / d.wait_times.length),
+        }));
+        setWaitData(formatted);
+      })
+      .catch((err) => console.error("Error fetching wait times:", err));
+  }, [city]); // <-- Re-fetch when city changes
+
+  return (
+    <div className="flex flex-col gap-4 h-full">
+      <div className="flex-1 bg-gray-900/60 rounded-xl border border-gray-800 p-4 flex flex-col shadow-lg">
+        <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">Visit Volume Trend (Today)</h3>
+        <div className="flex-1 min-h-[150px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={trendData} margin={{ top: 5, right: 0, left: -25, bottom: 0 }}>
+              <defs>
+                <linearGradient id="colorVolume" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#22d3ee" stopOpacity={0.3}/>
+                  <stop offset="95%" stopColor="#22d3ee" stopOpacity={0}/>
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" vertical={false} />
+              <XAxis dataKey="time" stroke="#4b5563" fontSize={10} tickLine={false} axisLine={false} />
+              <YAxis stroke="#4b5563" fontSize={10} tickLine={false} axisLine={false} />
+              <Tooltip contentStyle={{ backgroundColor: '#111827', borderColor: '#374151', fontSize: '12px' }} itemStyle={{ color: '#22d3ee' }} />
+              <Area type="monotone" dataKey="volume" stroke="#22d3ee" strokeWidth={2} fillOpacity={1} fill="url(#colorVolume)" />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+      <div className="flex-1 bg-gray-900/60 rounded-xl border border-gray-800 p-4 flex flex-col shadow-lg">
+        <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">Avg Wait Time by Zone (mins)</h3>
+        <div className="flex-1 min-h-[150px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={waitData} layout="vertical" margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" horizontal={false} />
+              <XAxis type="number" stroke="#4b5563" fontSize={10} tickLine={false} axisLine={false} />
+              <YAxis dataKey="zone" type="category" stroke="#9ca3af" fontSize={10} tickLine={false} axisLine={false} />
+              <Tooltip cursor={{ fill: '#1f2937' }} contentStyle={{ backgroundColor: '#111827', borderColor: '#374151', fontSize: '12px' }} />
+              <Bar dataKey="avgWait" fill="#f59e0b" radius={[0, 4, 4, 0]} barSize={16} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+    </div>
+  );
+}
+</file>
+
+<file path="frontend/src/components/dashboard/KPIStrip.tsx">
+"use client";
+
+import { useEffect, useState } from "react";
+import { Users, Activity, Clock, HeartPulse } from "lucide-react";
+
+export default function KPIStrip({ city }: { city: string }) {
+  const [data, setData] = useState<any>(null);
+
+  useEffect(() => {
+    fetch(`http://127.0.0.1:8000/api/v1/analytics/kpis?city=${city}`)
+      .then((res) => res.json())
+      .then((json) => setData(json))
+      .catch((err) => console.error("Error fetching KPIs:", err));
+  }, [city]);
+
+  if (!data) return <div className="h-14 flex items-center justify-center text-teal-400 animate-pulse font-mono text-xs tracking-widest">LOADING TELEMETRY...</div>;
+
+  return (
+    <div className="flex gap-3 items-center">
+      
+      {/* KPI Card 1 */}
+      <div className="bg-[#020b14]/80 backdrop-blur-md rounded-xl border border-teal-500/20 py-2.5 px-4 flex items-center gap-4 shadow-lg min-w-[160px]">
+        <div className="p-2 bg-teal-500/10 rounded-lg">
+          <Activity className="w-5 h-5 text-teal-400" />
+        </div>
+        <div className="flex flex-col">
+          <span className="text-xl font-bold text-white leading-none">{data.total_requests}</span>
+          <span className="text-[9px] font-bold tracking-widest text-slate-400 uppercase mt-1">Active Requests</span>
+        </div>
+      </div>
+      
+      {/* KPI Card 2 */}
+      <div className="bg-[#020b14]/80 backdrop-blur-md rounded-xl border border-teal-500/20 py-2.5 px-4 flex items-center gap-4 shadow-lg min-w-[160px]">
+        <div className="p-2 bg-teal-500/10 rounded-lg">
+          <Users className="w-5 h-5 text-teal-400" />
+        </div>
+        <div className="flex flex-col">
+          <span className="text-xl font-bold text-white leading-none">{data.active_caregivers}</span>
+          <span className="text-[9px] font-bold tracking-widest text-slate-400 uppercase mt-1">Deployed Staff</span>
+        </div>
+      </div>
+
+      {/* KPI Card 3 */}
+      <div className="bg-[#020b14]/80 backdrop-blur-md rounded-xl border border-teal-500/20 py-2.5 px-4 flex items-center gap-4 shadow-lg min-w-[160px]">
+        <div className="p-2 bg-teal-500/10 rounded-lg">
+          <HeartPulse className="w-5 h-5 text-teal-400" />
+        </div>
+        <div className="flex flex-col">
+          <div className="flex items-baseline gap-1">
+            <span className="text-xl font-bold text-white leading-none">{data.caregiver_ratio}</span>
+            <span className="text-[10px] text-teal-400 font-mono">pts/stf</span>
+          </div>
+          <span className="text-[9px] font-bold tracking-widest text-slate-400 uppercase mt-1">Staffing Ratio</span>
+        </div>
+      </div>
+
+      {/* KPI Card 4 */}
+      <div className="bg-[#020b14]/80 backdrop-blur-md rounded-xl border border-teal-500/20 py-2.5 px-4 flex items-center gap-4 shadow-lg min-w-[160px]">
+        <div className="p-2 bg-teal-500/10 rounded-lg">
+          <Clock className="w-5 h-5 text-teal-400" />
+        </div>
+        <div className="flex flex-col">
+          <div className="flex items-baseline gap-1">
+            <span className="text-xl font-bold text-white leading-none">{data.average_wait_time}</span>
+            <span className="text-[10px] text-teal-400 font-mono">mins</span>
+          </div>
+          <span className="text-[9px] font-bold tracking-widest text-slate-400 uppercase mt-1">Avg Wait Time</span>
+        </div>
+      </div>
+
+    </div>
+  );
+}
+</file>
+
+<file path="frontend/src/components/map/DemandMap.tsx">
+"use client";
+
+import { useEffect, useState, useMemo } from "react";
+import { MapContainer, TileLayer, CircleMarker, Tooltip, useMap } from "react-leaflet";
+
+const CITY_COORDS: Record<string, [number, number]> = {
+  "Riyadh": [24.7136, 46.6753],
+  "Jeddah": [21.5433, 39.1925],
+  "Abu_Dhabi": [24.4539, 54.3773],
+  "Dubai": [25.2048, 55.2708]
+};
+
+function MapUpdater({ center }: { center: [number, number] }) {
+  const map = useMap();
+  useEffect(() => {
+    map.setView(center, 11, { animate: true });
+  }, [center, map]);
+  return null;
+}
+
+export default function DemandMap({ city, activeServices, onNodeSelect }: { city: string, activeServices: string[], onNodeSelect: () => void }) {
+  const [requests, setRequests] = useState<any[]>([]);
+  const [caregivers, setCaregivers] = useState<any[]>([]);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [reqRes, cgRes] = await Promise.all([
+          fetch(`http://127.0.0.1:8000/api/v1/demand/heatmap?city=${city}`),
+          fetch(`http://127.0.0.1:8000/api/v1/caregivers/locations?city=${city}`)
+        ]);
+        setRequests(await reqRes.json());
+        setCaregivers(await cgRes.json());
+      } catch (error) {
+        console.error("Failed to fetch map data:", error);
+      }
+    };
+    fetchData();
+  }, [city]);
+
+  const filteredRequests = useMemo(() => {
+    return requests.filter(req => activeServices.includes(req.service_type));
+  }, [requests, activeServices]);
+
+  const center = CITY_COORDS[city] || CITY_COORDS["Abu_Dhabi"];
+
+  return (
+    <div className="h-full w-full relative">
+      <MapContainer center={center} zoom={11} style={{ height: "100%", width: "100%" }} zoomControl={false}>
+        <MapUpdater center={center} />
+        
+        <TileLayer
+          url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+          attribution='&copy; <a href="https://carto.com/attributions">CARTO</a>'
+        />
+
+        {filteredRequests.map((req) => (
+          <CircleMarker
+            key={req.id}
+            center={[req.location.lat, req.location.lng]}
+            radius={req.urgency === "High" ? 6 : 4}
+            eventHandlers={{ click: onNodeSelect }}
+            pathOptions={{ 
+              color: req.urgency === "High" ? "#ef4444" : "#f59e0b",
+              fillColor: req.urgency === "High" ? "#ef4444" : "#f59e0b",
+              fillOpacity: 0.6, weight: 1
+            }}
+          >
+            <Tooltip className="bg-[#020b14] text-white border-teal-500/30">
+              <div className="font-mono text-xs">
+                <strong className="text-teal-400">{req.id}</strong><br/>
+                Service: {req.service_type}<br/>
+                Urgency: {req.urgency}<br/>
+                Wait: {req.wait_time_mins} mins
+              </div>
+            </Tooltip>
+          </CircleMarker>
+        ))}
+
+        {caregivers.map((cg) => (
+          <CircleMarker
+            key={cg.id}
+            center={[cg.location.lat, cg.location.lng]}
+            radius={8}
+            eventHandlers={{ click: onNodeSelect }}
+            pathOptions={{ color: "#2dd4bf", fillColor: "#0f766e", fillOpacity: 0.8, weight: 2 }}
+          >
+            <Tooltip className="bg-[#020b14] text-white border-teal-500/30">
+              <div className="font-mono text-xs">
+                <strong className="text-teal-400">{cg.name}</strong><br/>
+                Status: {cg.status}<br/>
+                Specialty: {cg.specialty}
+              </div>
+            </Tooltip>
+          </CircleMarker>
+        ))}
+      </MapContainer>
+    </div>
+  );
+}
+</file>
+
+<file path="frontend/src/components/map/MapWrapper.tsx">
+"use client";
+
+import dynamic from "next/dynamic";
+
+const DemandMap = dynamic(() => import("./DemandMap"), {
+  ssr: false,
+  loading: () => (
+    <div className="h-full w-full flex items-center justify-center bg-[#020b14] text-teal-400 font-mono text-sm animate-pulse">
+      INITIALIZING GEOSPATIAL ENGINE...
+    </div>
+  ),
+});
+
+export default function MapWrapper({ city, activeServices, onNodeSelect }: { city: string, activeServices: string[], onNodeSelect: () => void }) {
+  return <DemandMap city={city} activeServices={activeServices} onNodeSelect={onNodeSelect} />;
+}
+</file>
+
+<file path="frontend/.eslintrc.json">
+{
+  "extends": ["next/core-web-vitals", "next/typescript"]
+}
+</file>
+
+<file path="frontend/.gitignore">
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+/.pnp
+.pnp.js
+.yarn/install-state.gz
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# local env files
+.env*.local
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+</file>
+
+<file path="frontend/next.config.mjs">
+/** @type {import('next').NextConfig} */
+const nextConfig = {};
+
+export default nextConfig;
+</file>
+
+<file path="frontend/package.json">
+{
+  "name": "frontend",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "clsx": "^2.1.1",
+    "leaflet": "^1.9.4",
+    "lucide-react": "^1.28.0",
+    "next": "14.2.35",
+    "react": "^18",
+    "react-dom": "^18",
+    "react-leaflet": "^4.2.1",
+    "recharts": "^3.10.1",
+    "tailwind-merge": "^3.6.0"
+  },
+  "devDependencies": {
+    "@types/leaflet": "^1.9.22",
+    "@types/node": "^20",
+    "@types/react": "^18",
+    "@types/react-dom": "^18",
+    "eslint": "^8",
+    "eslint-config-next": "14.2.35",
+    "postcss": "^8",
+    "tailwindcss": "^3.4.1",
+    "typescript": "^5"
+  }
+}
+</file>
+
+<file path="frontend/postcss.config.mjs">
+/** @type {import('postcss-load-config').Config} */
+const config = {
+  plugins: {
+    tailwindcss: {},
+  },
+};
+
+export default config;
+</file>
+
+<file path="frontend/README.md">
+This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+
+## Getting Started
+
+First, run the development server:
+
+```bash
+npm run dev
+# or
+yarn dev
+# or
+pnpm dev
+# or
+bun dev
+```
+
+Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+
+You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+
+This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+
+## Learn More
+
+To learn more about Next.js, take a look at the following resources:
+
+- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
+- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+
+You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+
+## Deploy on Vercel
+
+The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+
+Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+</file>
+
+<file path="frontend/tailwind.config.ts">
+import type { Config } from "tailwindcss";
+
+const config: Config = {
+  content: [
+    "./src/pages/**/*.{js,ts,jsx,tsx,mdx}",
+    "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
+    "./src/app/**/*.{js,ts,jsx,tsx,mdx}",
+  ],
+  theme: {
+    extend: {
+      colors: {
+        background: "var(--background)",
+        foreground: "var(--foreground)",
+      },
+    },
+  },
+  plugins: [],
+};
+export default config;
+</file>
+
+<file path="frontend/tsconfig.json">
+{
+  "compilerOptions": {
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "allowJs": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "preserve",
+    "incremental": true,
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  },
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+  "exclude": ["node_modules"]
+}
+</file>
+
+</files>

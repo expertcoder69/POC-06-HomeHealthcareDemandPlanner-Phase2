@@ -12,7 +12,8 @@ export default function AnalyticsCharts({ city }: { city: string }) {
   const [waitData, setWaitData] = useState<any[]>([]);
 
   useEffect(() => {
-    fetch(`http://127.0.0.1:8000/api/v1/analytics/wait-times?city=${city}`)
+    // Changed from http://127.0.0.1:8000/api/... to /api/... for Docker networking proxy
+    fetch(`/api/v1/analytics/wait-times?city=${city}`)
       .then((res) => res.json())
       .then((data) => {
         const formatted = data.map((d: any) => ({

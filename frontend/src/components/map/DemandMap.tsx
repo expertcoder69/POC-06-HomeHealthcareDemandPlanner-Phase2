@@ -10,7 +10,6 @@ const CITY_COORDS: Record<string, [number, number]> = {
   "Dubai": [25.2048, 55.2708]
 };
 
-// Component to smoothly pan the map when city changes
 function MapUpdater({ center }: { center: [number, number] }) {
   const map = useMap();
   useEffect(() => {
@@ -19,7 +18,7 @@ function MapUpdater({ center }: { center: [number, number] }) {
   return null;
 }
 
-export default function DemandMap({ city, activeServices }: { city: string, activeServices: string[] }) {
+export default function DemandMap({ city, activeServices, onNodeSelect }: { city: string, activeServices: string[], onNodeSelect: () => void }) {
   const [requests, setRequests] = useState<any[]>([]);
   const [caregivers, setCaregivers] = useState<any[]>([]);
 
@@ -27,8 +26,9 @@ export default function DemandMap({ city, activeServices }: { city: string, acti
     const fetchData = async () => {
       try {
         const [reqRes, cgRes] = await Promise.all([
-          fetch(`http://127.0.0.1:8000/api/v1/demand/heatmap?city=${city}`),
-          fetch(`http://127.0.0.1:8000/api/v1/caregivers/locations?city=${city}`)
+          // Changed from http://127.0.0.1:8000/api/... to /api/... for Docker networking proxy
+          fetch(`/api/v1/demand/heatmap?city=${city}`),
+          fetch(`/api/v1/caregivers/locations?city=${city}`)
         ]);
         setRequests(await reqRes.json());
         setCaregivers(await cgRes.json());
@@ -37,9 +37,8 @@ export default function DemandMap({ city, activeServices }: { city: string, acti
       }
     };
     fetchData();
-  }, [city]); // <-- Re-fetch when city changes
+  }, [city]);
 
-  // Filter requests based on checkboxes
   const filteredRequests = useMemo(() => {
     return requests.filter(req => activeServices.includes(req.service_type));
   }, [requests, activeServices]);
@@ -47,7 +46,7 @@ export default function DemandMap({ city, activeServices }: { city: string, acti
   const center = CITY_COORDS[city] || CITY_COORDS["Abu_Dhabi"];
 
   return (
-    <div className="h-full w-full rounded-xl overflow-hidden relative">
+    <div className="h-full w-full relative">
       <MapContainer center={center} zoom={11} style={{ height: "100%", width: "100%" }} zoomControl={false}>
         <MapUpdater center={center} />
         
@@ -61,15 +60,16 @@ export default function DemandMap({ city, activeServices }: { city: string, acti
             key={req.id}
             center={[req.location.lat, req.location.lng]}
             radius={req.urgency === "High" ? 6 : 4}
+            eventHandlers={{ click: onNodeSelect }}
             pathOptions={{ 
               color: req.urgency === "High" ? "#ef4444" : "#f59e0b",
               fillColor: req.urgency === "High" ? "#ef4444" : "#f59e0b",
               fillOpacity: 0.6, weight: 1
             }}
           >
-            <Tooltip className="bg-gray-900 text-white border-gray-700">
+            <Tooltip className="bg-[#020b14] text-white border-teal-500/30">
               <div className="font-mono text-xs">
-                <strong>{req.id}</strong><br/>
+                <strong className="text-teal-400">{req.id}</strong><br/>
                 Service: {req.service_type}<br/>
                 Urgency: {req.urgency}<br/>
                 Wait: {req.wait_time_mins} mins
@@ -83,11 +83,12 @@ export default function DemandMap({ city, activeServices }: { city: string, acti
             key={cg.id}
             center={[cg.location.lat, cg.location.lng]}
             radius={8}
-            pathOptions={{ color: "#22d3ee", fillColor: "#0891b2", fillOpacity: 0.8, weight: 2 }}
+            eventHandlers={{ click: onNodeSelect }}
+            pathOptions={{ color: "#2dd4bf", fillColor: "#0f766e", fillOpacity: 0.8, weight: 2 }}
           >
-            <Tooltip className="bg-gray-900 text-white border-gray-700">
+            <Tooltip className="bg-[#020b14] text-white border-teal-500/30">
               <div className="font-mono text-xs">
-                <strong>{cg.name}</strong><br/>
+                <strong className="text-teal-400">{cg.name}</strong><br/>
                 Status: {cg.status}<br/>
                 Specialty: {cg.specialty}
               </div>
