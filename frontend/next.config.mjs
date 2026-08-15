@@ -6,7 +6,7 @@ const nextConfig = {
         {
           source: '/api/:path*',
           // Proxies requests to the Docker Service Name 'backend'
-          destination: 'http://backend:8000/api/:path*', 
+          destination: 'https://poc-06-homehealthcaredemandplanner-phase2.onrender.com', 
         },
       ];
     },
